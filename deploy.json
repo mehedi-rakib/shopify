@@ -1,0 +1,36 @@
+{
+  "name": "azan-wholesale-shopify-app",
+  "version": "1.0.0",
+  "description": "Azan Wholesale Shopify Dropshipping App",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon --exec \"npx tsx server.ts\" --watch server.ts --watch src --ext ts,tsx,js,jsx 2>&1 | tee dev.log",
+    "build": "next build",
+    "start": "NODE_ENV=production tsx server.ts 2>&1 | tee server.log",
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset",
+    "docker:build": "docker build -t azan-wholesale-shopify-app .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env azan-wholesale-shopify-app",
+    "deploy:prepare": "npm run lint && npm run build"
+  },
+  "keywords": [
+    "shopify",
+    "dropshipping",
+    "azan-wholesale",
+    "ecommerce",
+    "nextjs"
+  ],
+  "author": "Azan Wholesale",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/azan-wholesale-shopify-app"
+  },
+  "homepage": "https://azanwholesale.com",
+  "bugs": {
+    "url": "https://github.com/your-username/azan-wholesale-shopify-app/issues"
+  }
+}

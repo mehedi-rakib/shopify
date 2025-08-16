@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
+import { tokenStorage } from '@/lib/token-storage'
 
 interface ImportRequest {
   productId: number
-  shopifyStoreUrl: string
-  shopifyAccessToken: string
+  shop: string
   customPrice?: number
   appId: string
   secretKey: string
@@ -41,15 +41,27 @@ interface ShopifyProduct {
   }>
 }
 
+// In-memory storage for shop tokens (shared with auth callback)
+const shopTokens = tokenStorage
+
 export async function POST(request: NextRequest) {
   try {
     const body: ImportRequest = await request.json()
-    const { productId, shopifyStoreUrl, shopifyAccessToken, customPrice, appId, secretKey } = body
+    const { productId, shop, customPrice, appId, secretKey } = body
 
-    if (!productId || !shopifyStoreUrl || !shopifyAccessToken || !appId || !secretKey) {
+    if (!productId || !shop || !appId || !secretKey) {
       return NextResponse.json(
         { success: false, message: 'Missing required fields' },
         { status: 400 }
+      )
+    }
+
+    // Get the Shopify access token for this shop
+    const shopifyAccessToken = shopTokens.get(shop)
+    if (!shopifyAccessToken) {
+      return NextResponse.json(
+        { success: false, message: 'Shop not authenticated. Please reinstall the app.' },
+        { status: 401 }
       )
     }
 
@@ -98,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create product in Shopify
-    const shopifyApiUrl = `${shopifyStoreUrl}/admin/api/2024-01/products.json`
+    const shopifyApiUrl = `https://${shop}/admin/api/2024-01/products.json`
     const shopifyResponse = await axios.post(
       shopifyApiUrl,
       { product: shopifyProduct },

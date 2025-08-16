@@ -9,10 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Search, Filter, Package, DollarSign, ShoppingCart, Settings, Store, Key } from 'lucide-react'
+import { Search, Filter, Package, DollarSign, ShoppingCart, Settings, Store, Key, ExternalLink } from 'lucide-react'
 import axios from 'axios'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { useShopifyAppBridge } from '@/hooks/use-shopify-app-bridge'
 
 interface AzanProduct {
   id: number
@@ -36,6 +37,15 @@ interface ApiResponse {
 }
 
 export default function Home() {
+  // Get Shopify parameters from URL
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams('')
+  const shop = urlParams.get('shop') || ''
+  const host = urlParams.get('host') || ''
+  const apiKey = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || ''
+
+  // Initialize Shopify App Bridge
+  useShopifyAppBridge({ shop, apiKey })
+
   const [products, setProducts] = useState<AzanProduct[]>([])
   const [filteredProducts, setFilteredProducts] = useState<AzanProduct[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,17 +58,24 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [categories, setCategories] = useState<string[]>([])
   const [brands, setBrands] = useState<string[]>([])
-  const [shopifyStoreUrl, setShopifyStoreUrl] = useState('')
-  const [shopifyAccessToken, setShopifyAccessToken] = useState('')
   const [importingProduct, setImportingProduct] = useState<number | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showPricingDialog, setShowPricingDialog] = useState(false)
   const [selectedProductForPricing, setSelectedProductForPricing] = useState<AzanProduct | null>(null)
   const [customPrice, setCustomPrice] = useState('')
+  const [isEmbedded, setIsEmbedded] = useState(false)
 
   // API configuration
   const API_BASE_URL = 'https://beta.azanwholesale.com'
   const API_ENDPOINT = '/api/en/products/by-api'
+
+  // Detect if we're running in Shopify embedded environment
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      setIsEmbedded(!!urlParams.get('shop') && !!urlParams.get('host'))
+    }
+  }, [])
 
   const apiClient = axios.create({
     baseURL: API_BASE_URL,
@@ -111,15 +128,10 @@ export default function Home() {
   }
 
   const handleImportProduct = async (productId: number, customPrice?: number) => {
-    if (!shopifyStoreUrl || !shopifyAccessToken) {
-      alert('Please configure Shopify settings first')
-      setShowSettings(true)
-      return
-    }
-
     try {
       setImportingProduct(productId)
       
+      // For embedded apps, we need to get the session token
       const response = await fetch('/api/import', {
         method: 'POST',
         headers: {
@@ -127,8 +139,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           productId,
-          shopifyStoreUrl,
-          shopifyAccessToken,
+          shop,
           customPrice,
           appId,
           secretKey
@@ -291,25 +302,31 @@ export default function Home() {
               <div className="flex justify-center mb-4">
                 <Package className="h-12 w-12 text-blue-600" />
               </div>
-              <CardTitle>Azan Wholesale Shopify App</CardTitle>
+              <CardTitle className="flex items-center justify-center gap-2">
+                Azan Wholesale Shopify App
+                {isEmbedded && <Badge variant="outline">Embedded</Badge>}
+              </CardTitle>
               <CardDescription>
-                Connect to your Azan Wholesale account to browse and import products
+                {isEmbedded 
+                  ? "Configure your Azan Wholesale credentials to start importing products"
+                  : "Connect to your Azan Wholesale account to browse and import products"
+                }
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">App ID</label>
+                <label className="text-sm font-medium mb-2 block">Azan App ID</label>
                 <Input
-                  placeholder="Enter your App ID"
+                  placeholder="Enter your Azan App ID"
                   value={appId}
                   onChange={(e) => setAppId(e.target.value)}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-2 block">Secret Key</label>
+                <label className="text-sm font-medium mb-2 block">Azan Secret Key</label>
                 <Input
                   type="password"
-                  placeholder="Enter your Secret Key"
+                  placeholder="Enter your Azan Secret Key"
                   value={secretKey}
                   onChange={(e) => setSecretKey(e.target.value)}
                 />
@@ -324,8 +341,15 @@ export default function Home() {
                 onClick={handleAuthenticate}
                 disabled={!appId || !secretKey}
               >
+                <Key className="h-4 w-4 mr-2" />
                 Connect to Azan Wholesale
               </Button>
+              {isEmbedded && (
+                <div className="text-center text-sm text-gray-600">
+                  <p>Running inside Shopify Admin</p>
+                  <p className="text-xs">Shop: {shop}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -334,25 +358,27 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen ${isEmbedded ? 'bg-white' : 'bg-gray-50'}`}>
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <Package className="h-8 w-8 text-blue-600 mr-3" />
-              <h1 className="text-xl font-semibold">Azan Wholesale</h1>
+      {!isEmbedded && (
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center">
+                <Package className="h-8 w-8 text-blue-600 mr-3" />
+                <h1 className="text-xl font-semibold">Azan Wholesale</h1>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </Button>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
-            </Button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className={`${isEmbedded ? 'p-4' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}`}>
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex flex-col lg:flex-row gap-4">
@@ -402,6 +428,7 @@ export default function Home() {
         <div className="mb-6">
           <p className="text-sm text-gray-600">
             Showing {filteredProducts.length} of {products.length} products
+            {isEmbedded && <span className="ml-2 text-blue-600">• Embedded Mode</span>}
           </p>
         </div>
 

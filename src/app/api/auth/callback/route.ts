@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
+import { tokenStorage } from '@/lib/token-storage'
 
-const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET
+const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET!
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -15,11 +16,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Verify HMAC signature (simplified - in production, implement proper HMAC verification)
-    const query = searchParams.toString()
-    const params = new URLSearchParams(query)
-    params.delete('hmac')
+    // Verify HMAC signature
+    const queryParams = new URLSearchParams(searchParams.toString())
+    queryParams.delete('hmac')
     
+    const message = queryParams.toString()
+    const generatedHash = crypto
+      .createHmac('sha256', SHOPIFY_API_SECRET)
+      .update(message)
+      .digest('base64')
+    
+    if (generatedHash !== hmac) {
+      return NextResponse.json({ error: 'HMAC verification failed' }, { status: 401 })
+    }
+
     // Exchange authorization code for access token
     const tokenResponse = await axios.post(`https://${shop}/admin/oauth/access_token`, {
       client_id: process.env.SHOPIFY_API_KEY,
@@ -38,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     const shopData = shopResponse.data.shop
 
-    // In production, store this information in your database
+    // Store shop information and access token
     const shopInfo = {
       shop,
       access_token,
@@ -48,14 +58,15 @@ export async function GET(request: NextRequest) {
       created_at: new Date().toISOString(),
     }
 
+    // Store the access token for this shop
+    tokenStorage.setToken(shop, access_token)
+
     console.log('Shop successfully connected:', shopInfo)
 
-    // Redirect to the main app with success message
-    const redirectUrl = new URL(process.env.NEXT_PUBLIC_APP_URL!)
-    redirectUrl.searchParams.append('shop', shop)
-    redirectUrl.searchParams.append('success', 'true')
+    // For embedded apps, redirect to Shopify admin with the app loaded
+    const redirectUrl = `https://${shop}/admin/apps/${process.env.SHOPIFY_API_KEY}`
     
-    return NextResponse.redirect(redirectUrl.toString())
+    return NextResponse.redirect(redirectUrl)
 
   } catch (error: any) {
     console.error('OAuth callback error:', error.response?.data || error.message)
